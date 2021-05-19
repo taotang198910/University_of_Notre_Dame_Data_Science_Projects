@@ -1,0 +1,469 @@
+---
+title: "Introduction to Data Science Project"
+author: "Tao Tang"
+date: "3/22/2020"
+output: pdf_document
+---
+
+#The task:
+You have been asked by the physicians to conduct an analysis of the data using three of the classification methods we have seen in this class, and provide a video presentation that describes those results.For your analysis, you should:
+1.Download the data from NeXus:  FNA_cancer.csv
+2.Perform basic exploratory data analysis.
+3.Split the data into test and training data.
+4.Build a classification algorithm using decision trees.  Prune your tree appropriately.
+5.Build a classification algorithm using random forests/bagging.  Adjust the parameters ofthe forest appropriately.
+6.Build a classification algorithm using Kth Nearest Neighbors.  Tune the value of Kappropriately.
+
+# Exploratory Data Analysis
+
+```{r}
+#Load the libraries
+
+library(rpart)
+library(partykit)
+library(class)
+library(tidyverse)
+library(dplyr)
+```
+
+
+```{r}
+#Loading data
+cancer_data <- read.csv('FNA_cancer.csv', header=TRUE)
+glimpse(cancer_data)
+```
+
+```{r}
+# Remove 1st and last column
+cancer_data <- cancer_data[2:32]
+
+head(cancer_data)
+```
+
+```{r}
+## Create a chart to analyze the distribution of diagnosis
+ggplot(data=cancer_data, aes(x=diagnosis))+geom_bar()
+table(cancer_data$diagnosis)
+```
+
+```{r}
+## Create a plot for Area_mean vs area_se
+ggplot(data=cancer_data, aes(x=area_mean, y=area_se, color=diagnosis))+
+  geom_point() +
+  labs(title = "Relationship of Area with the Diagnosis", 
+       x = "Area Mean", y = "Area SE") 
+```
+
+```{r}
+## Create a plot to understand the relationship for radius_mean vs radius_se
+ggplot(data=cancer_data, aes(x=radius_mean, y=radius_se, color=diagnosis))+
+  geom_point() +
+  labs(title = "Relationship of Radius with the Diagnosis", 
+       x = "Radius Mean", y = "Radius SE")
+```
+
+
+```{r}
+##Create a plot to understand the relationship of perimeter_mean vs perimeter_se
+ggplot(data=cancer_data, aes(x=perimeter_mean, y=perimeter_se, color=diagnosis))+
+  geom_point() +
+  labs(title = "Relationship of Perimeter with the Diagnosis", 
+       x = "Perimeter Mean", y = "Perimeter SE")
+
+```
+
+```{r}
+##Heatmap of mean variables to understand the correlation of variables.
+
+library(corrplot)
+library(RColorBrewer)
+
+corrDf <- cancer_data
+
+
+#Select only the parameters of interest.
+##corrDf <- corrDf %>% 
+          ##select(diagnosis, radius_mean, area_mean, perimeter_mean, smoothness_mean, texture_mean, compactness_mean, concavity_mean, symmetry_mean,concave.points_mean, fractal_dimension_mean)
+
+
+#Generate correlation matrix between variables.
+##corrMatrix <- cor(corrDf[, sapply(corrDf, is.numeric)], method = "pearson")
+
+
+
+#Correlation Plot
+##corrplot(corrMatrix, method = "color", outline = T, addgrid.col = "darkgray", order="hclust", addrect = 6, 
+         ##rect.col = "black", rect.lwd = 5,cl.pos = "b", tl.col = "indianred4", tl.cex = 1, ##cl.cex = 1, 
+         ##addCoef.col = "white", number.digits = 2, number.cex = 0.75,
+         ##col =colorRampPalette(c("darkred","white","midnightblue"))(100))
+
+
+```
+
+```{r}
+##Heatmap of some of the mean, se and worst variables to understand the correlation of these variables.
+
+library(corrplot)
+library(RColorBrewer)
+
+corrDf2 <- cancer_data
+
+
+#Select only the parameters of interest.
+##corrDf2 <- corrDf2 %>% 
+         ## select(radius_mean, radius_se, radius_worst, smoothness_mean, smoothness_se, smoothness_worst,  concavity_mean, concavity_se, concavity_worst)
+
+
+#Generate correlation matrix between variables.
+##corrMatrix2 <- cor(corrDf2[, sapply(corrDf2, is.numeric)], method = "pearson")
+
+
+
+#Correlation Plot
+##corrplot(corrMatrix2, method = "color", outline = T, addgrid.col = "darkgray", order="hclust", addrect = 6, 
+        ## rect.col = "black", rect.lwd = 5,cl.pos = "b", tl.col = "indianred4", tl.cex = 1, ##cl.cex = 1, 
+         ##addCoef.col = "white", number.digits = 2, number.cex = 0.75,
+         ##col =colorRampPalette(c("darkred","white","midnightblue"))(100))
+
+
+```
+
+
+```{r}
+##perimeter_mean vs perimeter_worst
+ggplot(data=cancer_data, aes(x=perimeter_mean, y=perimeter_worst, color=diagnosis))+
+  geom_point() +
+  labs(title = "Relationship of Perimeter with the Diagnosis", 
+       x = "Perimeter mean", y = "Perimeter Worst")
+
+```
+
+```{r}
+##plot to analyze the relationship of fractal_dimension_mean vs area_mean
+ggplot(data=cancer_data, aes(x=fractal_dimension_mean, y=area_mean, color=diagnosis))+
+  geom_point() +
+  labs(title = "Relationship of Fractal Dimension Mean with the Area Mean", 
+       x = "Fractal Dimension Mean", y = "Area Mean")
+
+```
+
+
+
+
+##Splitting the data
+
+```{r}
+##splitting data
+set.seed(1847)
+n <- nrow(cancer_data)
+test_index <- sample.int(n, size=round(n*0.2))
+train <- cancer_data[-test_index, ]
+test <- cancer_data[test_index, ]
+
+glimpse(train)
+```
+
+
+
+## Descison Tree
+
+```{r}
+# Create a decision Tree for diagnosis using rest of the variables.
+
+form <- as.formula(diagnosis~.)
+
+training_diagnosis <- rpart(form, data=train)
+
+training_diagnosis
+```
+
+```{r}
+#Produce a partykit based plot of the tree you produced.
+
+plot(as.party(training_diagnosis))
+```
+
+```{r}
+#Calculate the predictions for the test data using this model.  Use those predictions to calculate the confusion matrix for the test data.
+
+predict_test <- predict(training_diagnosis, test, type="class")
+
+
+
+# Print the confusion matrix
+
+confusion_m <- table(predict_test, test$diagnosis)
+
+confusion_m
+
+```
+
+```{r}
+# Proportion of mis-classification
+
+1 - sum(diag(confusion_m)/nrow(test))
+```
+
+```{r}
+#Create the CP/relative error table for your model.
+printcp(training_diagnosis)
+
+```
+
+```{r}
+# Plot the CP Error 
+
+plotcp(training_diagnosis)
+```
+
+```{r}
+##pruning the tree
+training_diagnosis2 <- rpart(form, data=train, control = rpart.control(cp = 0.01))
+training_diagnosis2
+
+
+```
+
+```{r}
+# Create a plot for the party.
+
+plot(as.party(training_diagnosis2))
+
+
+```
+
+```{r}
+# Create the prediction of the pruned tree.
+
+pred2 <- predict(training_diagnosis2, test, 'class')
+confusion2 <- table(pred2, test$diagnosis)
+confusion2
+1- sum(diag(confusion2))/nrow(test)
+
+```
+
+```{r}
+# Proportion of Mis-classification of the pruned tree
+
+
+```
+
+
+## Random Forest
+```{r}
+##Random Forest
+library(randomForest)
+
+#random Forest with default parameters (mtry=5, ntree=500)
+#Why choose mtry=5: square root of predictors which is 32 is around 5.
+set.seed(1847)
+
+
+rf <- randomForest(form, data=train, mtry=5, ntree=500)
+rf
+
+##predict
+predTest <- predict(rf, test, 'class')
+confusion3 <- table(predTest, test$diagnosis)
+confusion3
+#Mis-classification proportion
+1-sum(diag(confusion3))/nrow(test)
+```
+
+```{r}
+##create a function to calculate OOB
+computeOOBErrEst <- function (x)
+{
+  cm <- x$confusion
+  cm <- cm[, -ncol(cm)]
+  1 - sum(diag(cm)) / sum(cm)
+}
+```
+
+```{r}
+##Using For loop to identify the ntree that has the least OOB
+oob=c()
+for (i in c(100,500,1000)) {
+  model2 <- randomForest(form, data=train, ntree=i, mtry=5)
+  oob[i]=computeOOBErrEst(model2)
+}
+
+table(oob)
+which.min(oob)
+```
+
+**So here we use mtry=5 and ntree=500 for the random forest.**
+
+
+
+
+```{r fig1, fig.height = 4}
+#Importance chart
+importance(rf)
+varImpPlot(rf, sort=TRUE, main = 'Importance')
+```
+
+
+## KNN Classification
+
+
+```{r}
+#create a copy of the data removing the unique identifier in the first column
+cancer2 <- cancer_data
+
+
+```
+
+
+
+```{r}
+#create an indicator variable of the diagnosis
+cancer2$diagnosis <- ifelse(cancer2$diagnosis == 'M' , 1,0)
+```
+
+
+
+
+
+```{r}
+#attach data
+attach(cancer2)
+```
+
+
+
+
+```{r}
+#set the seed to 1847
+#create traning and test datasets with a 80/20 split
+set.seed(1847)
+test_id <- sample.int(nrow(cancer2) , size = round(0.2 * nrow(cancer2)))
+train_data <- cancer2[-test_id , ]
+test_data  <- cancer2[test_id , ]
+#glimpse of training data
+glimpse(train_data)
+```
+
+
+```{r}
+#create the rescale function
+rescale_x <- function(x){ (x - min(x)) / (max(x) - min(x))}
+#rescale the data using sapply
+cancer2 <- sapply(X = cancer2 , FUN = rescale_x)
+```
+
+
+
+************
+************
+************
+KNN with all the predictors
+************
+************
+************
+
+************
+KKN with k = 1
+```{r}
+#conduct knn classification with k=1
+cancer_knn_1<- knn(train_data[-1] , test_data[-1] , cl=train_data$diagnosis , k=1 )
+
+
+#show confusion matrix of k = 1
+table(cancer_knn_1 , test_data$diagnosis)
+```
+
+
+```{r}
+#calculate mis-classification of accuracy of predictions for k = 1
+acc_1 <- mean(cancer_knn_1 == test_data$diagnosis)
+1-acc_1
+```
+
+
+
+****************
+KNN with k = 3
+```{r}
+#conduct knn classification with k=3
+cancer_knn_3 <- knn(train_data[-1] , test_data[-1] , cl=train_data$diagnosis , k=3 )
+
+
+#show confusion matrix of k = 3
+table(cancer_knn_3 , test_data$diagnosis)
+```
+
+
+
+```{r}
+#calculate mis-classification of accuracy of predictions for k = 3
+acc_3 <- mean(cancer_knn_3 == test_data$diagnosis)
+1-acc_3
+```
+
+
+
+
+****************
+KNN with k = 5
+```{r}
+#conduct knn classification with k=5
+cancer_knn_5 <- knn(train_data[-1] , test_data[-1] , cl=train_data$diagnosis , k=5 )
+
+
+#show confusion matrix of k = 5
+table(cancer_knn_5 , test_data$diagnosis)
+```
+
+
+
+```{r}
+#calculate mis-classification 0f accuracy of predictions for k = 5
+acc_5 <- mean(cancer_knn_5 == test_data$diagnosis)
+1-acc_5
+```
+
+
+
+
+
+****************
+KNN with k = 25
+```{r}
+#conduct knn classification with k=25
+cancer_knn_25 <- knn(train_data[-1] , test_data[-1] , cl=train_data$diagnosis , k=25 )
+
+
+#show confusion matrix of k = 25
+table(cancer_knn_25 , test_data$diagnosis)
+```
+
+
+
+```{r}
+#calculate mis-classification of accuracy of predictions for k = 25
+acc_25 <- mean(cancer_knn_25 == test_data$diagnosis)
+1-acc_25
+```
+
+
+
+****************
+KNN with k = 100
+```{r}
+#conduct knn classification with k=100
+cancer_knn_5 <- knn(train_data[-1] , test_data[-1] , cl=train_data$diagnosis , k=100 )
+
+#show confusion matrix of k = 100
+table(cancer_knn_5 , test_data$diagnosis)
+```
+
+
+
+```{r}
+#calculate mis-classification of accuracy of predictions for k = 100
+acc_100 <- mean(cancer_knn_100 == test_data$diagnosis)
+1-acc_100
+```
+
+k = 5 had the lowest mis-classification rate with 0.9736842 accuracy.
