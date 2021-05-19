@@ -1,0 +1,404 @@
+---
+title: "Linear Regression Project - Violent Crimes"
+author: "Tao Tang"
+output: pdf_document
+---
+
+
+```{r}
+library(tidyverse)
+```
+
+
+##Data Cleaning
+
+```{r}
+##Loading the data and header files, convert missing value "?" with NA
+crimes <- read.table('CommViolPredUnnormalizedData.txt', sep=',',
+                     header=FALSE, stringsAsFactors = FALSE, 
+                     na.strings='?')
+
+header <- read.csv('header.csv', stringsAsFactors = FALSE)
+
+##Change the variable names of crimes dataset
+names(crimes) <- header$Variable_Name
+glimpse(crimes)
+```
+
+<p>&nbsp;</p>
+
+```{r}
+##Variables that have many missing value
+colnames(crimes)[colSums(is.na(crimes)) > 400]
+```
+
+
+```{r}
+# Remove missing values in ViolentCrimesPerPop 
+# and all the variables that have many missing values and non-predictive variables.
+
+crimes2 <- crimes %>% filter(!is.na(ViolentCrimesPerPop)) %>%
+                select(population:PolicBudgPerPop,
+                       -c(LemasSwornFT:PolicBudgPerPop), 
+                       LandArea,PopDens,PctUsePubTrans, 
+                       ViolentCrimesPerPop)
+
+##remove incomplete rows before fedding the model
+crimes.complete <- na.omit(crimes2)
+
+glimpse(crimes.complete)
+```
+
+
+## Step 1: Exploratory Data Analysis (EDA)
+
+```{r}
+# Response variable distribution
+summary(crimes$ViolentCrimesPerPop)
+
+ggplot(crimes, aes(ViolentCrimesPerPop))+geom_histogram(binwidth = 40, color='steelblue')
+```
+
+<p>&nbsp;</p>
+
+```{r}
+##Predictor one: PctKidsBornNeverMar: percentage of kids born to never married
+ggplot(crimes, aes(x=PctKidsBornNeverMar, y=ViolentCrimesPerPop)) + 
+  geom_point() + 
+  scale_x_continuous("Percentage of Kids Born to Never Married") +
+  scale_y_continuous(breaks = c(0,1000,2000,3000,4000,5000), 
+                     name="Total Number of Violent Crimes Per 100K Popuation") +
+  ggtitle('PctKidsBornNeverMar vs. ViolentCrimesPerPop')+
+  theme(plot.title = element_text(hjust = 0.5))
+  
+```
+
+**The percentage of kids born to never married is positively correlated to ViolentCrimesPerPop.**
+
+
+<p>&nbsp;</p>
+
+
+```{r}
+##Predictor two: PctPersDenseHous: percent of persons in dense housing (more than 1 person per room)
+ggplot(crimes, aes(x=PctPersDenseHous, y=ViolentCrimesPerPop)) + 
+  geom_point() + 
+  scale_x_continuous("Percent of Persons in Dense Housing") +
+  scale_y_continuous(breaks = c(0,1000,2000,3000,4000,5000), 
+                     name="Total Number of Violent Crimes Per 100K Popuation")+
+  ggtitle('PctPersDenseHous vs. ViolentCrimesPerPop')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+**The percent of persons in dense housing (more than 1 person per room) is positively correlated to ViolentCrimesPerPop.**
+
+<p>&nbsp;</p>
+
+
+```{r}
+##Predictor three: racePctWhite: percentage of population that is caucasian
+ggplot(crimes, aes(x=racePctWhite, y=ViolentCrimesPerPop)) + 
+  geom_point() + 
+  scale_x_continuous("Percentage of Population That Is Caucasian") +
+  scale_y_continuous(breaks = c(0,1000,2000,3000,4000,5000), 
+                     name="Total Number of Violent Crimes Per 100K Popuation")+
+  ggtitle('racePctWhite vs. ViolentCrimesPerPop')+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+**The percentage of population that is caucasian is negatively correlated to ViolentCrimesPerPop.**
+
+<p>&nbsp;</p>
+
+
+```{r}
+##Predictor four: racepctblack: percentage of population that is african american
+ggplot(crimes, aes(x=racepctblack, y=ViolentCrimesPerPop)) + 
+  geom_point() + 
+  scale_x_continuous("Percentage of Population That Is African American") +
+  scale_y_continuous(breaks = c(0,1000,2000,3000,4000,5000), 
+                     name="Total Number of Violent Crimes Per 100K Popuation")+
+  ggtitle('racepctblack vs. ViolentCrimesPerPop') +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+**The percentage of population that is african american is positively correlated to ViolentCrimesPerPop. **
+
+
+## Step 2: Fit a Linear Model
+
+```{r}
+model <- lm(ViolentCrimesPerPop~PctKidsBornNeverMar+PctPersDenseHous+
+                    racePctWhite+racepctblack,crimes.complete)
+summary(model)
+```
+**The output does match my intuition. The model suggests a positive association between the ViolentCrimesPerPop and PctKidsBornNeverMar, PctPersDenseHous,racepctblack; and a negative association between the ViolentCrimesPerPop and racePctWhite.**
+
+**The ViolentCrimesPerPop (total number of violent crimes per 100K popuation) without considering any variables is 387.429, on average. For every one-unit increase in racePctWhite, we expect the ViolentCrimesPerPop to descrease 2.861, on average. **
+
+**Approximately 57% of the variation in ViolentCrimesPerPop is explained by the predictors.**
+
+**The p-value of F-staticstic is small enough to tell us that at least one of the predictors is siginificant important.**
+
+
+
+## Step 3: Perform Model Selection
+
+### Apply fastbw() to the data in R.
+
+```{r}
+##Apply fastbw() to the data.
+require(rms)
+
+model2<-ols(ViolentCrimesPerPop~PctKidsBornNeverMar+PctPersDenseHous+racePctWhite+racepctblack,
+            crimes.complete)
+fastbw(model2, rule="p", sls=0.05)
+
+summary(lm(ViolentCrimesPerPop~PctKidsBornNeverMar+PctPersDenseHous+racepctblack, 
+           data=crimes.complete))
+```
+
+**It does match my intuition. The auto selection selected three predictos has lower adjusted R-squared than the model built from step 2. So I will choose the model from step 2 to proceed with.**
+
+
+<p>&nbsp;</p>
+
+### Apply stepAIC() to the data in R.
+
+```{r}
+##Apply stepAIC() to the data.
+library(MASS)
+
+extractAIC(model)
+aic.crimes <- stepAIC(model)
+```
+
+**It does match my intuition. The AIC selected the same variables as the model from step 2. So I will continue to choose the model from step 2 to prceed with.**
+
+<p>&nbsp;</p>
+
+## Step 4: Apply Diagnostics to the Model
+
+```{r}
+##Fitted values vs. residuals plot
+plot(model$fitted.values, model$residuals, ylim=c(-3000, 3000),xlim=c(0,4000))
+abline(h=0)
+```
+**There is a pattern on this plot, and thus the model assumption of constant error variance is not upheld.**
+
+
+<p>&nbsp;</p>
+
+
+```{r}
+require('lmtest')
+bptest(model)
+```
+
+**The plot and test both agree that the model assumption of contant variance is not upheld.**
+ 
+<p>&nbsp;</p>
+
+```{r}
+##Q-Q plot
+qqnorm(model$residuals)
+qqline(model$residuals)
+```
+
+**Non-normality is found based on the plot. Thus the assumption of normal errors is not upheld.**
+
+<p>&nbsp;</p>
+
+
+```{r}
+shapiro.test(model$residuals)
+```
+
+**The plot and test both agree that the model assumption of normal errors is not upheld.**
+
+<p>&nbsp;</p>
+
+
+```{r}
+##lagged residual plot
+n <- dim(crimes.complete)[1]
+plot(model$residuals[1:(n-1)], model$residuals[2:n], 
+     xlab= expression(hat(epsilon)[i]),ylab=expression(hat(epsilon)[i+1]),
+     ylim=c(-3000, 3000),xlim=c(-2000,4000))
+abline(h=0,v=0)
+```
+**The plot looks random.So based on the plot I would assue that the errors are uncorrelated, indicating the model assumption is upheld.**
+
+
+<p>&nbsp;</p>
+
+## Step 5: Invesstigate Fit for Individual Observations
+
+### Standardized Residuals - outliers
+```{r}
+##Standardized Residuals
+r_stand <- data.frame(round(rstandard(model),4))
+head(r_stand)
+
+##Filtering outliers by out rule of thumb threshold of three
+which(abs(rstandard(model))>3)
+
+##total number of outliers
+sum(abs(rstandard(model))>3)
+```
+
+**As we see that there are 45 points that having an absolute value bigger than 3, so those observation are considered outliers by our rule of thumb threshold of three. And it needs some more investigation.**
+
+<p>&nbsp;</p>
+
+
+### Cook's Distance and Influential obervations
+```{r}
+##calculate F threshold
+n <- dim(model.matrix(model))[1]
+p <- dim(model.matrix(model))[2]
+F.thresh <- qf(0.5,p,n-p)
+
+##calculate Cook's Distance
+cook_distance <- cooks.distance(model)
+head(cook_distance)
+
+##identify influential obervations
+which(cooks.distance(model)>F.thresh)
+```
+
+**As we see that the result means that none of them exceed that F threshold of 0.87. So we say that there are no influential observations.**
+
+<p>&nbsp;</p>
+
+## Step 6: Apply Transformations to Model as Needed
+
+### Apply Box-Cox transformation on the response
+```{r}
+require(MASS)
+
+##adding 1 to response because response variable must be positive.
+model2 <- lm((ViolentCrimesPerPop+1)~PctKidsBornNeverMar+PctPersDenseHous+
+                     racePctWhite+racepctblack,crimes.complete)
+
+##Box-Cox
+bc <- boxcox(model2, plotit = TRUE)
+
+##get the actural lambda value
+lambda <- bc$x[which.max(bc$y)]
+lambda
+```
+
+<p>&nbsp;</p>
+
+```{r}
+##plot residuals vs those four predictors to verify if they have quadratic relationship.
+##PctKidsBornNeverMar vs. residuals
+plot(crimes.complete$PctKidsBornNeverMar, model$residuals)
+lines(lowess(crimes.complete$PctKidsBornNeverMar, model$residuals), col='red')
+
+##PctPersDenseHous vs. residuals
+plot(crimes.complete$PctPersDenseHous, model$residuals)
+lines(lowess(crimes.complete$PctPersDenseHous, model$residuals), col='red')
+
+##racePctWhite vs. residuals
+plot(crimes.complete$racePctWhite, model$residuals)
+lines(lowess(crimes.complete$racePctWhite, model$residuals), col='red')
+
+##racepctblack vs. residuals
+plot(crimes.complete$racepctblack, model$residuals)
+lines(lowess(crimes.complete$racepctblack, model$residuals), col='red')
+```
+
+**The above outputs indicate that the four predictors do not have quadratic relationship with residuals, so we do not need to use polynomial regression in this case.**
+
+<p>&nbsp;</p>
+
+```{r}
+##fit a new model with the new transformed variable
+mod.bc <- lm((ViolentCrimesPerPop+1)^lambda~PctKidsBornNeverMar+PctPersDenseHous+
+                     racePctWhite+racepctblack,crimes.complete)
+summary(mod.bc)
+```
+
+<p>&nbsp;</p>
+
+```{r}
+plot(mod.bc$fitted.values, mod.bc$residuals)
+abline(h=0)
+```
+
+**The plot for the new model shows some improvement over the plot for the original model fit,and the new model assumption of contant variance is upheld.**
+
+<p>&nbsp;</p>
+
+```{r}
+##Q-Q plot
+qqnorm(mod.bc$residuals)
+qqline(mod.bc$residuals)
+```
+
+**Based on the Q-Q plot, the assumption of normal errors is upheld for the new model.**
+
+<p>&nbsp;</p>
+
+```{r}
+##lagged residual plot
+n <- dim(crimes.complete)[1]
+plot(mod.bc$residuals[1:(n-1)], mod.bc$residuals[2:n], 
+     xlab= expression(hat(epsilon)[i]),ylab=expression(hat(epsilon)[i+1]))
+abline(h=0,v=0)
+```
+
+**The plot looks random. So based on the plot I would assue that the errors are uncorrelated, indicating the new model assumption is upheld.**
+
+<p>&nbsp;</p>
+
+## Step 7: Report Inferences and Make Predictions
+
+**report the parameter estimates and p-values for the final model in a table.**
+```{r}
+##Coefficients
+library(broom)
+coeff <- tidy(coef(summary(mod.bc))[,c(1,4)])
+colnames(coeff) <- c('Predictor','Parameter Estimate','P-Value')
+coeff
+
+# R²
+summary(mod.bc)$r.squared
+# adjusted R²
+summary(mod.bc)$adj.r.squared
+```
+
+<p>&nbsp;</p>
+
+**Compute and report a 95% confidence interval for the slope of whichever predictor you feel is most important.**
+```{r}
+# 95% CI for the slope of PctKidsBornNeverMar
+coef(summary(mod.bc))[2,1] + c(-1,1)*qt(0.975, 1988)*coef(summary(mod.bc))[2,2]
+```
+
+<p>&nbsp;</p>
+
+**Compute and report a 95% confidence interval for a prediction. In other words, choose particular values of your predictors that are meaningful (say, perhaps the median of each) and compute a 95% confidence interval for the predicted value of y at those values. **
+
+```{r}
+# 95% CI for the predicted value of y at the median of each predictors.
+x <- model.matrix(mod.bc)
+x0 <- apply(x,2,median)
+predict(mod.bc, new=data.frame(t(x0)), interval='confidence',level=0.95)
+```
+
+<p>&nbsp;</p>
+
+**Compute and report a 95% prediction interval for a particular observation. Again, you'll choose particular values of your predictors and compute the prediction interval for those values. **
+```{r}
+# compute 95% prediction interval for the particular observation that at the median values of  each predictor.
+dplyr::select(crimes.complete[10,],PctKidsBornNeverMar,PctPersDenseHous, racePctWhite, racepctblack)
+
+predict(mod.bc, new=data.frame(PctKidsBornNeverMar=2.08,
+                               PctPersDenseHous=2.47,
+                               racePctWhite=89.61, 
+                               racepctblack=3.14), 
+        interval='prediction',level=0.95)
+```
