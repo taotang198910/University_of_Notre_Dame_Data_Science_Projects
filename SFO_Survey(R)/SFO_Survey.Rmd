@@ -1,0 +1,259 @@
+---
+title: "SFO Survey"
+author: "Tao Tang (University of Notre Dame)"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+### Part A
+Address the Primary Questions of Interest for the SFO Executives
+
+The SFO team have three (3) specific questions they want you to investigate.
+
+- 1.Customers were asked to rate their opinion of the "SFO Airport as a whole" on a scale from 1 ("unacceptable") to 5 ("outstanding"). The executives want to know if there are patterns across the satisfied or dissatisfied customers based on demographic characteristics, such as sex, age group, and income level.
+- 2.The executives also want to know if customer satisfaction can be broken down into different attributes of the airport. Knowing this will help the team target specific strengths or areas of improvement. The central feature the customer satisfaction survey is a 14-question portion of the survey asking customers to rate satisfaction with different aspects of the airport (see Question 6 in the data directory). The executives want you to perform a quantitative analysis to determine if there are broad themes that emerge from this part of the survey.
+- 3.Free-response comments, either positive or negative, were collected in addition to the 14-item quantitative survey. The executives are not quite sure how to examine it without going through individual surveys one by one, but they want you to see if there are any concepts or insights that arise from these responses. Do the free responses relate to the findings in a) or b) at all?
+
+
+
+### Part A - 1
+
+```{r}
+library(tidyverse)
+library(poLCA)
+library(ggcorrplot)
+library(psych)
+library(tidytext)
+library(wordcloud2)
+```
+
+
+```{r}
+sfo <- read.table('SFO_survey_withText.txt',stringsAsFactors = T, header=T)
+```
+
+```{r}
+#Replace 6 with NA in Q6
+cols <- c("Q6A", "Q6B", "Q6C", "Q6D", "Q6E", "Q6F","Q6G","Q6H","Q6I","Q6J","Q6K", "Q6L", "Q6M", "Q6N")
+sfo[,cols][sfo[,cols]==6] <- NA
+
+#Convert columns to factors
+#sfo[,cols] <- lapply(sfo[,cols], function(x) as.factor(x))
+```
+
+
+```{r}
+lca <- cbind(Q17, Q18, Q19,Q6N)~1
+
+#2 classes LCA
+set.seed(1989)
+class2 <- poLCA(lca,
+                sfo,
+                nclass=2,
+                maxiter=10000,
+                tol = 1e-8,
+                nrep = 1,
+                verbose = F)
+
+class2
+```
+
+```{r}
+plot(class2)
+```
+
+```{r}
+#3 classes LCA
+set.seed(2000)
+class3 <- poLCA(lca,
+                sfo,
+                nclass=3,
+                maxiter=10000,
+                tol = 1e-8,
+                nrep = 1,
+                verbose = F)
+
+class3
+```
+
+```{r}
+plot(class3)
+```
+
+```{r}
+#4 classes LCA
+set.seed(3000)
+class4 <- poLCA(lca,
+                sfo,
+                nclass=4,
+                maxiter=10000,
+                tol = 1e-8,
+                nrep = 1,
+                verbose = F)
+
+class4
+```
+
+```{r}
+plot(class4)
+```
+
+### Part A-2
+```{r}
+#select the columns starts with Q6
+sfo_fa <- sfo %>% dplyr::select(cols)
+
+#get the correlation plot
+sfo_fa %>% 
+  cor(., use="pairwise.complete.obs") %>% 
+  ggcorrplot()
+```
+
+```{r}
+#nfactors
+sfo_fa %>% nfactors(.,rotate = 'none')
+```
+```{r}
+#parallel analysis
+sfo_fa %>% fa.parallel(.,fa='fa', n.iter = 50)
+```
+
+
+```{r}
+fact5 <- sfo_fa %>% fa(., nfactors = 5)
+fact5$loadings
+```
+
+```{r}
+fa.diagram(fact5$loadings)
+```
+
+```{r}
+fact4 <- sfo_fa %>% fa(., nfactors = 4)
+fact4$loadings
+fa.diagram(fact4$loadings)
+```
+
+
+```{r}
+fact3 <- sfo_fa %>% fa(., nfactors = 3)
+fact3$loadings
+fa.diagram(fact3$loadings)
+```
+
+3 factors gave the most Cumulative Var. We go with 3 factors. 
+
+
+### Part A-3
+
+```{r}
+#replace "/" with ";"
+sfo$Q7_text_All <- gsub('/',',',sfo$Q7_text_All)
+
+#Visualize the most frequent words 
+sfo %>% dplyr::select(Q7_text_All) %>% 
+        unnest_tokens(word, Q7_text_All) %>%
+        anti_join(stop_words) %>%
+        count(word, sort=TRUE) %>%
+        filter(n>50) %>%
+        wordcloud2(shape='cardioid')
+```
+
+
+
+### Part B
+Develop and Investigate Your Own Research Question
+
+The SFO executives feel that additional insights can be gained from the customer satisfaction survey dataset. Based on your prior EDA deliverable and the topics we have discussed in class, develop an additional research question and execute a plan to evaluate it with these data using a method we covered this semester. Provide an appropriate explanation of your method of choice and how it applies to your question. If formal hypotheses are tested, clearly explain the results of these tests. If the method is more descriptive or data-driven, define how the results are evaluated, and provide sufficient output and data visuals to communicate the outcome. You don’t need to fish for a “significant” finding here; even null or unexpected results can be useful if the hypothesis is reasonable.
+
+```{r}
+library(stm)
+library(tm)
+sfoDat <- textProcessor(documents=sfo$Q7_text_All, metadata = sfo)
+```
+
+
+```{r}
+sfoPrep <- prepDocuments(documents=sfoDat$documents,
+                         vocab = sfoDat$vocab,
+                         meta = sfoDat$meta)
+```
+
+
+```{r}
+#find the best number of topics
+kTest <- searchK(documents = sfoPrep$documents,
+                 vocab = sfoDat$vocab,
+                 K=c(3,4,5,6), verbose=FALSE, cores = 5)
+plot(kTest)
+```
+
+We can settle with 5 topics based on the output above.
+
+
+```{r}
+top5 <- stm(documents = sfoPrep$documents,
+            vocab = sfoPrep$vocab,
+            K=5, verbose = FALSE)
+labelTopics(top5)
+```
+
+Topic 1: "Take too long get to airport and crowded" - commute to airport
+Topic 2: "Positive comment about facilities" -Facilities
+Topic 3: "Long and inefficient security custom line and information display" - Security Custom
+Topic 4: "Need better unique shops" -Shops & Restaur
+Topic 5: "Confusing signage inside airport" -Signage
+
+
+
+
+```{r}
+plot(top5)
+```
+
+
+
+```{r}
+plot(top5, type='labels')
+```
+
+
+```{r}
+plot(top5, type='perspectives', topics = c(4,1))
+```
+
+
+```{r}
+plot(topicCorr(top5))
+```
+
+No correlated relationship among these 5 topics
+
+
+```{r}
+findThoughts(top5, texts = sfoPrep$meta$Q7_text_All, n=2)
+```
+
+
+
+
+```{r}
+#Topic 4
+cloud(top5,topic = 4)
+```
+
+
+
+```{r}
+#Topic 5
+cloud(top5,topic = 5)
+```
+
+
+
+
+
+
+
